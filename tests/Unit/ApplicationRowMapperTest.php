@@ -3,10 +3,9 @@
 namespace Tests\Unit;
 
 use App\Import\ApplicationRowMapper;
+use App\Import\ImportFileException;
 use App\Import\XlsxWorksheetReader;
-use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use ZipArchive;
 
 final class ApplicationRowMapperTest extends TestCase
@@ -55,7 +54,7 @@ final class ApplicationRowMapperTest extends TestCase
 
     public function test_it_rejects_wrong_headers(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(ImportFileException::class);
         $this->expectExceptionMessage('Row 1, column external_id');
 
         iterator_to_array((new ApplicationRowMapper)->rows($this->fixture('wrong_headers.xlsx')));
@@ -63,7 +62,7 @@ final class ApplicationRowMapperTest extends TestCase
 
     public function test_it_rejects_a_shared_formula_with_a_conflicting_cache(): void
     {
-        $this->expectException(RuntimeException::class);
+        $this->expectException(ImportFileException::class);
         $this->expectExceptionMessage('Row 4, column phone: shared formula cache does not match');
 
         iterator_to_array((new ApplicationRowMapper)->rows($this->fixture('shared_cache_mismatch.xlsx')));
@@ -71,7 +70,7 @@ final class ApplicationRowMapperTest extends TestCase
 
     public function test_it_rejects_money_that_would_require_rounding(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(ImportFileException::class);
         $this->expectExceptionMessage('Row 2, column budget_uah');
 
         iterator_to_array((new ApplicationRowMapper)->rows($this->fixture('bad_budget.xlsx')));
@@ -79,7 +78,7 @@ final class ApplicationRowMapperTest extends TestCase
 
     public function test_it_rejects_text_that_exceeds_the_schema(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(ImportFileException::class);
         $this->expectExceptionMessage('Row 2, column external_id');
 
         iterator_to_array((new ApplicationRowMapper)->rows($this->fixture('long_external_id.xlsx')));
@@ -127,7 +126,7 @@ final class ApplicationRowMapperTest extends TestCase
             try {
                 iterator_to_array((new ApplicationRowMapper)->rows($path));
                 $this->fail('An out-of-range date cell was accepted.');
-            } catch (InvalidArgumentException $exception) {
+            } catch (ImportFileException $exception) {
                 $this->assertStringContainsString('Row 2, column created_at', $exception->getMessage());
             }
         }
@@ -152,7 +151,7 @@ final class ApplicationRowMapperTest extends TestCase
             try {
                 iterator_to_array((new ApplicationRowMapper)->rows($path));
                 $this->fail('An out-of-range Excel serial was accepted.');
-            } catch (InvalidArgumentException $exception) {
+            } catch (ImportFileException $exception) {
                 $this->assertStringContainsString('Row 2, column created_at', $exception->getMessage());
             }
         }
@@ -198,7 +197,7 @@ final class ApplicationRowMapperTest extends TestCase
             return str_replace('ref="E3:E4">+222222222222</ns0:f>', 'ref="E3:E4">A3</ns0:f>', $contents);
         });
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(ImportFileException::class);
         $this->expectExceptionMessage('Row 4, column phone: shared formula cannot be expanded');
 
         iterator_to_array((new ApplicationRowMapper)->rows($path));
@@ -227,7 +226,7 @@ final class ApplicationRowMapperTest extends TestCase
                 }
 
                 $this->fail('Incomplete worksheet XML was accepted.');
-            } catch (RuntimeException $exception) {
+            } catch (ImportFileException $exception) {
                 $this->assertSame('Invalid or incomplete XLSX worksheet XML.', $exception->getMessage());
                 $this->assertGreaterThan(1, $read);
             }

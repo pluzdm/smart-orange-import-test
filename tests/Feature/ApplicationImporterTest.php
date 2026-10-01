@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Import\ApplicationImporter;
+use App\Import\ImportFileException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use RuntimeException;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -101,7 +101,7 @@ final class ApplicationImporterTest extends TestCase
         try {
             (new ApplicationImporter)->import($path);
             $this->fail('An invalid row was accepted.');
-        } catch (InvalidArgumentException $exception) {
+        } catch (ImportFileException $exception) {
             $this->assertStringContainsString('Row 7, column budget_uah', $exception->getMessage());
         }
 
@@ -120,7 +120,7 @@ final class ApplicationImporterTest extends TestCase
         try {
             (new ApplicationImporter)->import($path);
             $this->fail('Corrupt worksheet XML was accepted.');
-        } catch (RuntimeException $exception) {
+        } catch (ImportFileException $exception) {
             $this->assertSame('Invalid or incomplete XLSX worksheet XML.', $exception->getMessage());
         }
 
@@ -141,7 +141,7 @@ final class ApplicationImporterTest extends TestCase
         try {
             $importer->import($path);
             $this->fail('Corrupt worksheet XML was accepted.');
-        } catch (RuntimeException $exception) {
+        } catch (ImportFileException $exception) {
             $this->assertSame('Invalid or incomplete XLSX worksheet XML.', $exception->getMessage());
         }
 

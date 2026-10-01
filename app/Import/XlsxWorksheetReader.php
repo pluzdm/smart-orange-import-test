@@ -3,7 +3,6 @@
 namespace App\Import;
 
 use Generator;
-use RuntimeException;
 use SimpleXMLElement;
 use XMLReader;
 use ZipArchive;
@@ -24,7 +23,7 @@ final class XlsxWorksheetReader
         $zip = new ZipArchive;
 
         if ($zip->open($path) !== true) {
-            throw new RuntimeException('Unable to open the XLSX file.');
+            throw new ImportFileException('Unable to open the XLSX file.');
         }
 
         $previousXmlErrorState = libxml_use_internal_errors(true);
@@ -46,20 +45,20 @@ final class XlsxWorksheetReader
                     $xml = $reader->readOuterXml();
 
                     if ($xml === '') {
-                        throw new RuntimeException('Invalid or incomplete XLSX worksheet XML.');
+                        throw new ImportFileException('Invalid or incomplete XLSX worksheet XML.');
                     }
 
                     $row = simplexml_load_string($xml, SimpleXMLElement::class, LIBXML_NONET);
 
                     if ($row === false) {
-                        throw new RuntimeException('Unable to read an XLSX worksheet row.');
+                        throw new ImportFileException('Unable to read an XLSX worksheet row.');
                     }
 
                     $number = (int) $row->attributes()['r'];
 
                     if ($number !== $previousRow + 1) {
                         $expectedRow = $previousRow + 1;
-                        throw new RuntimeException("Missing or out-of-order XLSX row {$expectedRow}.");
+                        throw new ImportFileException("Missing or out-of-order XLSX row {$expectedRow}.");
                     }
 
                     $cells = [];
@@ -68,19 +67,19 @@ final class XlsxWorksheetReader
                         $reference = (string) $cell->attributes()['r'];
 
                         if (! preg_match('/^([A-Z]+)(\d+)$/', $reference, $match) || (int) $match[2] !== $number) {
-                            throw new RuntimeException("Row {$number}: invalid cell reference.");
+                            throw new ImportFileException("Row {$number}: invalid cell reference.");
                         }
 
                         $index = $this->columnIndex($match[1]);
 
                         if ($index >= count(self::HEADERS)) {
-                            throw new RuntimeException("Row {$number}: unexpected column {$match[1]}.");
+                            throw new ImportFileException("Row {$number}: unexpected column {$match[1]}.");
                         }
 
                         $column = self::HEADERS[$index];
 
                         if (isset($cells[$index])) {
-                            throw new RuntimeException("Row {$number}, column {$column}: duplicate cell {$reference}.");
+                            throw new ImportFileException("Row {$number}, column {$column}: duplicate cell {$reference}.");
                         }
 
                         $type = (string) $cell->attributes()['t'];
@@ -96,30 +95,30 @@ final class XlsxWorksheetReader
                                 $sharedIndex = (string) $children->f->attributes()['si'];
 
                                 if ($sharedIndex === '') {
-                                    throw new RuntimeException("Row {$number}, column {$column}: shared formula index is missing.");
+                                    throw new ImportFileException("Row {$number}, column {$column}: shared formula index is missing.");
                                 }
 
                                 if ($formula !== '') {
                                     $sharedFormulas[$sharedIndex] = $formula;
                                 } elseif (isset($sharedFormulas[$sharedIndex])) {
                                     if (! preg_match('/^\+[0-9]+$/D', $sharedFormulas[$sharedIndex])) {
-                                        throw new RuntimeException("Row {$number}, column {$column}: shared formula cannot be expanded without calculation.");
+                                        throw new ImportFileException("Row {$number}, column {$column}: shared formula cannot be expanded without calculation.");
                                     }
 
                                     $formula = $sharedFormulas[$sharedIndex];
 
                                     if ($value !== substr($formula, 1)) {
-                                        throw new RuntimeException("Row {$number}, column {$column}: shared formula cache does not match its base expression.");
+                                        throw new ImportFileException("Row {$number}, column {$column}: shared formula cache does not match its base expression.");
                                     }
                                 } else {
-                                    throw new RuntimeException("Row {$number}, column {$column}: shared formula base is missing.");
+                                    throw new ImportFileException("Row {$number}, column {$column}: shared formula base is missing.");
                                 }
                             } elseif ($formula === '') {
-                                throw new RuntimeException("Row {$number}, column {$column}: formula text is missing.");
+                                throw new ImportFileException("Row {$number}, column {$column}: formula text is missing.");
                             }
                         } elseif ($type === 's') {
                             if ($value === null || ! ctype_digit($value) || ! array_key_exists((int) $value, $sharedStrings)) {
-                                throw new RuntimeException("Row {$number}, column {$column}: shared string is missing.");
+                                throw new ImportFileException("Row {$number}, column {$column}: shared string is missing.");
                             }
 
                             $value = $sharedStrings[(int) $value];
@@ -139,7 +138,7 @@ final class XlsxWorksheetReader
                 }
 
                 if (libxml_get_errors() !== []) {
-                    throw new RuntimeException('Invalid or incomplete XLSX worksheet XML.');
+                    throw new ImportFileException('Invalid or incomplete XLSX worksheet XML.');
                 }
             } finally {
                 $reader->close();
@@ -159,7 +158,7 @@ final class XlsxWorksheetReader
         $sheets = $workbook->children($spreadsheetNamespace)->sheets->children($spreadsheetNamespace)->sheet;
 
         if (count($sheets) !== 1) {
-            throw new RuntimeException('The XLSX file must contain exactly one worksheet.');
+            throw new ImportFileException('The XLSX file must contain exactly one worksheet.');
         }
 
         $relationId = (string) $sheets[0]->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
@@ -174,7 +173,7 @@ final class XlsxWorksheetReader
         }
 
         if ($target === null || str_contains($target, '..') || str_contains($target, '://')) {
-            throw new RuntimeException('The XLSX worksheet reference is invalid.');
+            throw new ImportFileException('The XLSX worksheet reference is invalid.');
         }
 
         $sheetPath = str_starts_with($target, '/') ? ltrim($target, '/') : 'xl/'.$target;
@@ -182,7 +181,7 @@ final class XlsxWorksheetReader
         $date1904Value = isset($properties) ? (string) $properties->attributes()['date1904'] : '';
 
         if (! in_array($date1904Value, ['', '0', '1', 'false', 'true'], true)) {
-            throw new RuntimeException('Invalid XLSX date1904 value.');
+            throw new ImportFileException('Invalid XLSX date1904 value.');
         }
 
         $date1904 = in_array($date1904Value, ['1', 'true'], true);
@@ -208,7 +207,7 @@ final class XlsxWorksheetReader
             }
 
             if (libxml_get_errors() !== []) {
-                throw new RuntimeException('Invalid or incomplete XLSX shared strings XML.');
+                throw new ImportFileException('Invalid or incomplete XLSX shared strings XML.');
             }
         } finally {
             $reader->close();
@@ -220,14 +219,14 @@ final class XlsxWorksheetReader
     private function openPart(ZipArchive $zip, string $path, string $part): XMLReader
     {
         if ($zip->locateName($part) === false) {
-            throw new RuntimeException("The XLSX part {$part} is missing.");
+            throw new ImportFileException('A required XLSX component is missing.');
         }
 
         $reader = new XMLReader;
         $uri = 'zip://'.realpath($path).'#'.$part;
 
         if (! $reader->open($uri, null, LIBXML_NONET)) {
-            throw new RuntimeException("Unable to read the XLSX part {$part}.");
+            throw new ImportFileException('Unable to read a required XLSX component.');
         }
 
         return $reader;
@@ -238,7 +237,7 @@ final class XlsxWorksheetReader
         $xml = $zip->getFromName($part);
 
         if ($xml === false || ($element = simplexml_load_string($xml, SimpleXMLElement::class, LIBXML_NONET)) === false) {
-            throw new RuntimeException("Unable to read the XLSX part {$part}.");
+            throw new ImportFileException('Unable to read a required XLSX component.');
         }
 
         return $element;

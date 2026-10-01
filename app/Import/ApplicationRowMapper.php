@@ -6,7 +6,6 @@ use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 use Generator;
-use InvalidArgumentException;
 
 final class ApplicationRowMapper
 {
@@ -47,7 +46,7 @@ final class ApplicationRowMapper
         }
 
         if (! $headerSeen) {
-            throw new InvalidArgumentException('The XLSX header row is missing.');
+            throw new ImportFileException('The XLSX header row is missing.');
         }
     }
 
@@ -63,7 +62,7 @@ final class ApplicationRowMapper
             $cell = $row['cells'][$index] ?? null;
 
             if ($cell === null || $cell['formula'] !== null || $cell['value'] !== $expected) {
-                throw new InvalidArgumentException("Row 1, column {$expected}: expected XLSX header {$expected}.");
+                throw new ImportFileException("Row 1, column {$expected}: expected XLSX header {$expected}.");
             }
         }
     }
@@ -264,6 +263,6 @@ final class ApplicationRowMapper
 
     private function fail(int $row, string $column, string $reason): never
     {
-        throw new InvalidArgumentException("Row {$row}, column {$column}: {$reason}.");
+        throw new ImportFileException("Row {$row}, column {$column}: {$reason}.");
     }
 }
