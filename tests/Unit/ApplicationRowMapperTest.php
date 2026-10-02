@@ -120,7 +120,7 @@ final class ApplicationRowMapperTest extends TestCase
             $this->assertSame($expected, $rows[2]['created_at']);
         }
 
-        foreach (['0999-12-31T23:59:59', '0000-01-01T00:00:00'] as $input) {
+        foreach (['0999-12-31T23:59:59', '0000-01-01T00:00:00', '10000-01-01T00:00:00'] as $input) {
             $path = $this->withCreatedAtCell('d', $input);
 
             try {
@@ -135,11 +135,12 @@ final class ApplicationRowMapperTest extends TestCase
     public function test_it_checks_mysql_datetime_boundaries_for_excel_serials(): void
     {
         foreach ([
-            ['0', '1899-12-31 00:00:00'],
-            ['2958465.999988426', '9999-12-31 23:59:59'],
-            ['2958465', '9999-12-31 00:00:00'],
-        ] as [$input, $expected]) {
-            $path = $this->withCreatedAtCell('n', $input);
+            ['0', '1899-12-31 00:00:00', false],
+            ['2958465.999988426', '9999-12-31 23:59:59', false],
+            ['2958465', '9999-12-31 00:00:00', false],
+            ['2957003.999988426', '9999-12-31 23:59:59', true],
+        ] as [$input, $expected, $date1904]) {
+            $path = $this->withCreatedAtCell('n', $input, $date1904);
             $rows = iterator_to_array((new ApplicationRowMapper)->rows($path));
 
             $this->assertSame($expected, $rows[2]['created_at']);
@@ -155,6 +156,40 @@ final class ApplicationRowMapperTest extends TestCase
                 $this->assertStringContainsString('Row 2, column created_at', $exception->getMessage());
             }
         }
+    }
+
+    public function test_it_rejects_excel_serials_that_round_into_year_10000(): void
+    {
+        $accepted = [];
+
+        foreach ([
+            ['2958465.999999', false],
+            ['2957003.999999', true],
+        ] as [$serial, $date1904]) {
+            $path = $this->withCreatedAtCell('n', $serial, $date1904);
+
+            try {
+                iterator_to_array((new ApplicationRowMapper)->rows($path));
+                $accepted[] = $serial;
+            } catch (ImportFileException $exception) {
+                $this->assertSame('Row 2, column created_at: date is outside the MySQL DATETIME range.', $exception->getMessage());
+            }
+        }
+
+        $this->assertSame([], $accepted, 'Excel dates rounded into year 10000 were accepted.');
+    }
+
+    public function test_excel_serial_60_is_rejected_only_in_the_1900_date_system(): void
+    {
+        $path1904 = $this->withCreatedAtCell('n', '60', true);
+        $rows = iterator_to_array((new ApplicationRowMapper)->rows($path1904));
+        $this->assertSame('1904-03-01 00:00:00', $rows[2]['created_at']);
+
+        $path1900 = $this->withCreatedAtCell('n', '60');
+        $this->expectException(ImportFileException::class);
+        $this->expectExceptionMessage('Row 2, column created_at: Excel serial 60 is not a real calendar date.');
+
+        iterator_to_array((new ApplicationRowMapper)->rows($path1900));
     }
 
     public function test_it_accepts_all_date1904_boolean_representations(): void
@@ -238,9 +273,13 @@ final class ApplicationRowMapperTest extends TestCase
         }
     }
 
-    private function withCreatedAtCell(string $type, string $value): string
+    private function withCreatedAtCell(string $type, string $value, bool $date1904 = false): string
     {
-        return $this->modifiedFixture('applications.xlsx', static function (string $part, string $contents) use ($type, $value): string {
+        return $this->modifiedFixture('applications.xlsx', static function (string $part, string $contents) use ($type, $value, $date1904): string {
+            if ($part === 'xl/workbook.xml' && $date1904) {
+                return str_replace('<workbookPr/>', '<workbookPr date1904="1"/>', $contents);
+            }
+
             if ($part !== 'xl/worksheets/sheet1.xml') {
                 return $contents;
             }

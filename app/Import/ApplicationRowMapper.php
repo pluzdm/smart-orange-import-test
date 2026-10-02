@@ -245,7 +245,9 @@ final class ApplicationRowMapper
             $result = $date->format('Y-m-d H:i:s');
         }
 
-        if ($result < '1000-01-01 00:00:00' || $result > '9999-12-31 23:59:59') {
+        $year = (int) $date->format('Y');
+
+        if ($year < 1000 || $year > 9999) {
             $this->fail($row, $column, 'date is outside the MySQL DATETIME range');
         }
 
