@@ -19,7 +19,7 @@ docker compose exec -T app php artisan key:generate --no-ansi
 docker compose exec -T app php artisan migrate --force
 ```
 
-Open <http://127.0.0.1:18081> to upload an XLSX file. MySQL is available to the app on the `db` service; it is not exposed on a host port. The HTTP PHP runtime has `max_execution_time=30`, `upload_max_filesize=20M`, and `post_max_size=24M` in `docker/php.ini`. Apache also rejects request bodies larger than 24 MiB with a clear 413 page before PHP starts.
+The migration creates the `applications` table. Open <http://127.0.0.1:18081> to upload an XLSX file. MySQL is available to the app on the `db` service; it is not exposed on a host port. The HTTP PHP runtime has `max_execution_time=30`, `upload_max_filesize=20M`, and `post_max_size=24M` in `docker/php.ini`. Apache also rejects request bodies larger than 24 MiB with a clear 413 page before PHP starts.
 
 ## Useful commands
 
@@ -32,9 +32,17 @@ Set `IMPORT_BATCH_SIZE` in `.env` to an integer from 1 to 1000. The default is 5
 
 The file is read from PHP's temporary upload path. A successful import adds every row, including duplicate `external_id` values. Re-importing the same file adds those rows again. Reading, conversion, and all batch inserts run in one database transaction, so a failed import adds no rows. Keep the original assignment document and XLSX in `task/`; that directory, `.env`, and `vendor/` are ignored by Git.
 
+## XLSX format
+
+The workbook must contain exactly one worksheet. Its first row must have these 15 headers in this order: `external_id`, `created_at`, `first_name`, `last_name`, `phone`, `email`, `city`, `source`, `utm_campaign`, `product`, `budget_uah`, `status`, `manager`, `comment`, `next_contact_at`. Invalid rows stop the import and roll back all rows from that upload.
+
+Dates retain the workbook's date and time without a timezone shift. Empty optional cells become `NULL`, while zero remains zero. A phone formula containing one plus sign followed by digits is stored as text with the plus sign; supported shared formulas use their base expression without calculation. Double-plus and other unusual phone formulas are stored with a leading `=` and counted as warnings. Numeric phone cells are converted to decimal text without inventing missing digits or a country code.
+
+Worksheet rows are read sequentially, but shared strings are held in memory. Memory use therefore grows with the number and size of unique shared strings in the workbook; the reader does not have a fixed memory bound for that part.
+
 ## Verified local import
 
-A multipart HTTP POST through Apache with a valid CSRF session imported the supplied 11,098,384-byte XLSX. The POST took 6.035 seconds; reading, conversion, inserts, and commit inside the importer took 5.89 seconds. The application database count changed from 0 to 100,000. The result page showed 100,000 added rows and warning counts of 608 numeric phones, 205 unusual phone formulas, and 204 double-plus phone formulas. The effective HTTP PHP values were `max_execution_time=30`, `upload_max_filesize=20M`, and `post_max_size=24M`.
+A multipart HTTP POST through Apache in the local macOS Docker Compose environment (PHP 8.4, MySQL 8.4, port 18081) with a valid CSRF session imported the supplied 11,098,384-byte XLSX. The POST took 6.035 seconds; reading, conversion, inserts, and commit inside the importer took 5.89 seconds. The application database count changed from 0 to 100,000. The result page showed 100,000 added rows and warning counts of 608 numeric phones, 205 unusual phone formulas, and 204 double-plus phone formulas. The effective HTTP PHP values were `max_execution_time=30`, `upload_max_filesize=20M`, and `post_max_size=24M`. This large-file measurement preceded the later error-handling refactor and was not repeated for it.
 
 A separate HTTP request with a synthetic 25 MiB body returned status 413 and the upload-limit message. It did not import any data.
 
