@@ -7,6 +7,10 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "ext-dom": "*",
+        "ext-simplexml": "*",
+        "ext-xmlreader": "*",
+        "ext-zip": "*",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0"
     },

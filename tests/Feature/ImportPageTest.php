@@ -4,40 +4,12 @@ namespace Tests\Feature;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Tests\TestCase;
 
-final class ImportPageTest extends TestCase
+final class ImportPageTest extends MySqlIntegrationTestCase
 {
-    private const TEST_DATABASE = 'applications_import_test';
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $mysql = config('database.connections.mysql');
-        $this->assertSame('mysql', $mysql['driver']);
-        $this->assertNotSame(self::TEST_DATABASE, $mysql['database']);
-
-        config([
-            'database.connections.import_test' => array_replace($mysql, [
-                'database' => self::TEST_DATABASE,
-                'url' => null,
-            ]),
-            'database.default' => 'import_test',
-        ]);
-
-        DB::purge('import_test');
-        $this->assertTestDatabase();
-        Artisan::call('migrate', ['--database' => 'import_test', '--force' => true]);
-
-        $this->assertTestDatabase();
-        DB::connection('import_test')->table('applications')->delete();
-    }
-
     public function test_the_form_shows_the_repeat_import_warning_and_csrf_field(): void
     {
         $this->get(route('imports.create'))
@@ -163,24 +135,11 @@ final class ImportPageTest extends TestCase
         $this->assertSame(0, DB::table('applications')->count());
     }
 
-    private function assertTestDatabase(): void
-    {
-        $connection = DB::connection('import_test');
-        $this->assertSame(self::TEST_DATABASE, $connection->getDatabaseName());
-        $this->assertSame(self::TEST_DATABASE, $connection->selectOne('SELECT DATABASE() AS database_name')->database_name);
-    }
-
     private function fixtureUpload(string $name): UploadedFile
     {
         return UploadedFile::fake()->createWithContent(
             $name,
             file_get_contents(dirname(__DIR__).'/Fixtures/'.$name)
         );
-    }
-
-    protected function tearDown(): void
-    {
-        DB::disconnect('import_test');
-        parent::tearDown();
     }
 }

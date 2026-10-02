@@ -4,41 +4,13 @@ namespace Tests\Feature;
 
 use App\Import\ApplicationImporter;
 use App\Import\ImportFileException;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Tests\TestCase;
 use ZipArchive;
 
-final class ApplicationImporterTest extends TestCase
+final class ApplicationImporterTest extends MySqlIntegrationTestCase
 {
-    private const TEST_DATABASE = 'applications_import_test';
-
     private array $temporaryFiles = [];
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $mysql = config('database.connections.mysql');
-        $this->assertSame('mysql', $mysql['driver']);
-        $this->assertNotSame(self::TEST_DATABASE, $mysql['database']);
-
-        config([
-            'database.connections.import_test' => array_replace($mysql, [
-                'database' => self::TEST_DATABASE,
-                'url' => null,
-            ]),
-            'database.default' => 'import_test',
-        ]);
-
-        DB::purge('import_test');
-        $this->assertTestDatabase();
-        Artisan::call('migrate', ['--database' => 'import_test', '--force' => true]);
-
-        $this->assertTestDatabase();
-        DB::connection('import_test')->table('applications')->delete();
-    }
 
     public function test_it_inserts_multiple_batches_and_a_partial_final_batch(): void
     {
@@ -164,13 +136,6 @@ final class ApplicationImporterTest extends TestCase
         $this->assertSame(0, DB::table('applications')->count());
     }
 
-    private function assertTestDatabase(): void
-    {
-        $connection = DB::connection('import_test');
-        $this->assertSame(self::TEST_DATABASE, $connection->getDatabaseName());
-        $this->assertSame(self::TEST_DATABASE, $connection->selectOne('SELECT DATABASE() AS database_name')->database_name);
-    }
-
     private function insertQueryCount(): int
     {
         return count(array_filter(
@@ -214,7 +179,6 @@ final class ApplicationImporterTest extends TestCase
             unlink($path);
         }
 
-        DB::disconnect('import_test');
         parent::tearDown();
     }
 }
